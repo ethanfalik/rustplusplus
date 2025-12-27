@@ -35,6 +35,7 @@ import { RustPlusInfo } from '../structures/rustPlusInfo';
 import { RustPlusTime } from '../structures/rustPlusTime';
 import { RustPlusMap } from '../structures/rustPlusMap';
 import { RustPlusMapMarkers } from '../structures/rustPlusMapMarkers';
+import { RustPlusTeamInfo } from '../structures/rustPlusTeamInfo';
 import * as discordMessages from '../discordUtils/discordMessages';
 import * as discordVoice from '../discordUtils/discordVoice';
 
@@ -144,7 +145,7 @@ export class RustPlusInstance {
     public rpInfo: RustPlusInfo | null;
     public rpTime: RustPlusTime | null;
     public rpMap: RustPlusMap | null;
-    //private appTeamInfo: rustplus.AppTeamInfo | null;
+    public rpTeamInfo: RustPlusTeamInfo | null;
     public rpMapMarkers: RustPlusMapMarkers | null;
 
 
@@ -177,11 +178,8 @@ export class RustPlusInstance {
         this.rpInfo = null;
         this.rpTime = null;
         this.rpMap = null;
+        this.rpTeamInfo = null;
         this.rpMapMarkers = null;
-
-        //this.appTeamInfo = null;
-
-
 
         //this.leaderSteamId = '0'; /* 0 When there is no leader. */
     }
@@ -254,6 +252,7 @@ export class RustPlusInstance {
         this.rpInfo = null;
         this.rpTime = null;
         this.rpMap = null;
+        this.rpTeamInfo = null;
         this.rpMapMarkers = null;
 
         // TODO! Remove timers example: pollingTimer, inGameChatTimeout, customTimers like lockedCrate,
@@ -367,13 +366,14 @@ export class RustPlusInstance {
         const info = ((rpInfo as rp.AppResponse).info as rp.AppInfo);
         const time = ((rpTime as rp.AppResponse).time as rp.AppTime);
         const mapMarkers = ((rpMapMarkers as rp.AppResponse).mapMarkers as rp.AppMapMarkers);
+        const teamInfo = ((rpTeamInfo as rp.AppResponse).teamInfo as rp.AppTeamInfo);
 
         if (firstPoll || this.rpInfo === null || this.rpTime === null) {
             console.log('FIRST POLL')
-            // TODO! Set rpInfo, rpTime, rpTeamInfo, rpMapMarkers
             this.rpInfo = new RustPlusInfo(this, info);
             this.rpTime = new RustPlusTime(this, time);
             this.rpMapMarkers = new RustPlusMapMarkers(this, mapMarkers);
+            this.rpTeamInfo = new RustPlusTeamInfo(this, teamInfo);
         }
         else {
             console.log('POLL')
@@ -391,7 +391,7 @@ export class RustPlusInstance {
         (this.rpInfo as RustPlusInfo).updateInfo(info);
         (this.rpTime as RustPlusTime).updateTime(time);
         (this.rpMapMarkers as RustPlusMapMarkers).updateMapMarkers(mapMarkers);
-        // TODO! update rpInfo
+        (this.rpTeamInfo as RustPlusTeamInfo).updateTeamInfo(teamInfo);
 
         // TODO! smartAlarmHandler
         // TODO! storageMonitorHandler
