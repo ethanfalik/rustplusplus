@@ -541,15 +541,17 @@ export class DiscordManager {
         else if (interaction.isModalSubmit()) {
             extendedLogging = `Modal Submit Interaction: Modal ID: ${interaction.customId}`;
 
-            const fields = interaction.fields.fields;
-            if (fields.size > 0) {
-                extendedLogging += `, Field Values: `;
-                for (const [key, field] of Array.from(fields.entries())) {
-                    const displayValue = field.value.length > 50 ? `${field.value.substring(0, 50)}...` : field.value;
-                    extendedLogging += `[${key}]: ${displayValue}, `;
+            for (const [key, field] of interaction.fields.fields) {
+                if (field.type === discordjs.ComponentType.TextInput) {
+                    const value = field.value;
+                    const displayValue =
+                        value.length > 50 ? `${value.slice(0, 50)}...` : value;
+
+                    extendedLogging += ` [${key}]: ${displayValue},`;
                 }
-                extendedLogging = extendedLogging.slice(0, -2);
             }
+
+            extendedLogging = extendedLogging.replace(/,$/, '');
         }
         else {
             /* Do nothing for unsupported interaction types. */
