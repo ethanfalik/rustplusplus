@@ -140,6 +140,4 @@ export async function execute(dm: DiscordManager) {
             }
         }
     }
-
-    // TODO! global variable uptimeBot set new time.
 }

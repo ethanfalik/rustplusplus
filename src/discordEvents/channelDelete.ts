@@ -45,6 +45,7 @@ export async function execute(dm: DiscordManager, channel: discordjs.DMChannel |
             changed = true;
 
             // TODO! Send a direct message to the person removing the channel saying how to restore.
+            // This needs to be fixed when reset slash command is added, perhaps /reset <channelname>
         }
     }
 
