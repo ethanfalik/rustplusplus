@@ -23,12 +23,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import {
-    log, guildInstanceManager as gim, config, localeManager as lm, credentialsManager as cm
+    log, guildInstanceManager as gim, config, localeManager as lm, credentialsManager as cm,
+    rustPlusManager as rpm
 } from '../../index';
 import * as types from '../utils/types';
 import { GuildInstance, GuildChannelIds, EventNotificationSettings } from './guildInstanceManager';
 import { channelPermissions } from '../templates/channelPermissionsTemplate';
 import * as discordMessages from '../discordUtils/discordMessages';
+import { ConnectionStatus } from './rustPlusManager';
 
 const GLOBAL_SLASH_COMMANDS_DIR = 'discordGlobalSlashCommands'
 const GUILD_SLASH_COMMANDS_DIR = 'discordGuildSlashCommands'
@@ -309,7 +311,17 @@ export class DiscordManager {
         /* Setup category, channels and settings. */
         await this.setupGuildCategory(guild, enforcePermissions);
         await this.setupGuildChannels(guild, enforcePermissions);
+
         await this.setupGuildSettingsChannel(guild, false);
+        await this.setupGuildServersChannel(guild, true);
+        await this.setupGuildSmartSwitchesChannel(guild, true);
+        await this.setupGuildSmartAlarmsChannel(guild, true);
+        await this.setupGuildStorageMonitorsChannel(guild, true);
+
+        // TODO! Add setup functions for:
+        // - information
+        // - smartSwitchGroups
+        // - trackers
     }
 
     public async setupGuildCategory(guild: discordjs.Guild, enforceChannelPermissions: boolean = false) {
@@ -449,6 +461,112 @@ export class DiscordManager {
 
         gim.updateGuildInstance(guild.id);
     }
+
+    public async setupGuildServersChannel(guild: discordjs.Guild, update: boolean = true, create: boolean = false) {
+        const fn = '[DiscordManager: setupGuildServersChannel]';
+        const logParam = {
+            guildId: guild.id
+        };
+
+        const gInstance = gim.getGuildInstance(guild.id) as GuildInstance;
+        if (!('servers' in gInstance.guildChannelIds)) {
+            log.warn(`${fn} Could not find servers channel.`, logParam);
+            return;
+        }
+
+        if (!update && !create) return;
+
+        for (const serverId of Object.keys(gInstance.serverInfoMap)) {
+            let connectionStatus = ConnectionStatus.Disconnected;
+            const rpInstance = rpm.getInstance(guild.id, serverId);
+            if (rpInstance) {
+                connectionStatus = rpInstance.connectionStatus;
+            }
+
+            await discordMessages.sendServerMessage(this, guild.id, serverId, connectionStatus);
+        }
+    }
+
+    // TODO! setupGuildInformationChannel
+
+    public async setupGuildSmartSwitchesChannel(guild: discordjs.Guild, update: boolean = true,
+        create: boolean = false) {
+        const fn = '[DiscordManager: setupGuildSmartSwitchesChannel]';
+        const logParam = {
+            guildId: guild.id
+        };
+
+        const gInstance = gim.getGuildInstance(guild.id) as GuildInstance;
+        if (!('smartSwitches' in gInstance.guildChannelIds)) {
+            log.warn(`${fn} Could not find smartSwitches channel.`, logParam);
+            return;
+        }
+
+        if (!update && !create) return;
+
+        for (const [serverId, content] of Object.entries(gInstance.serverInfoMap)) {
+            const rpInstance = rpm.getInstance(guild.id, serverId);
+            if (!(rpInstance && content.active)) continue;
+
+            for (const smartSwitchId of Object.keys(content.smartSwitchConfigMap)) {
+                await discordMessages.sendSmartSwitchMessage(this, guild.id, serverId, smartSwitchId);
+            }
+        }
+    }
+
+    // TODO! setupGuildSmartSwitchGroupsChannel
+
+    public async setupGuildSmartAlarmsChannel(guild: discordjs.Guild, update: boolean = true,
+        create: boolean = false) {
+        const fn = '[DiscordManager: setupGuildSmartAlarmsChannel]';
+        const logParam = {
+            guildId: guild.id
+        };
+
+        const gInstance = gim.getGuildInstance(guild.id) as GuildInstance;
+        if (!('smartAlarms' in gInstance.guildChannelIds)) {
+            log.warn(`${fn} Could not find smartAlarms channel.`, logParam);
+            return;
+        }
+
+        if (!update && !create) return;
+
+        for (const [serverId, content] of Object.entries(gInstance.serverInfoMap)) {
+            const rpInstance = rpm.getInstance(guild.id, serverId);
+            if (!(rpInstance && content.active)) continue;
+
+            for (const smartAlarmId of Object.keys(content.smartAlarmConfigMap)) {
+                await discordMessages.sendSmartAlarmMessage(this, guild.id, serverId, smartAlarmId);
+            }
+        }
+    }
+
+    public async setupGuildStorageMonitorsChannel(guild: discordjs.Guild, update: boolean = true,
+        create: boolean = false) {
+        const fn = '[DiscordManager: setupGuildStorageMonitorsChannel]';
+        const logParam = {
+            guildId: guild.id
+        };
+
+        const gInstance = gim.getGuildInstance(guild.id) as GuildInstance;
+        if (!('storageMonitors' in gInstance.guildChannelIds)) {
+            log.warn(`${fn} Could not find storageMonitors channel.`, logParam);
+            return;
+        }
+
+        if (!update && !create) return;
+
+        for (const [serverId, content] of Object.entries(gInstance.serverInfoMap)) {
+            const rpInstance = rpm.getInstance(guild.id, serverId);
+            if (!(rpInstance && content.active)) continue;
+
+            for (const storageMonitorId of Object.keys(content.storageMonitorConfigMap)) {
+                await discordMessages.sendStorageMonitorMessage(this, guild.id, serverId, storageMonitorId);
+            }
+        }
+    }
+
+    // TODO! setupGuildTrackersChannel
 
     public logInteraction(interaction: discordjs.Interaction, status: 'Initiated' | 'Completed') {
         const fn = '[DiscordManager: logInteraction]';
