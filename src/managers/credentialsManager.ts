@@ -20,12 +20,22 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { Prisma, Credential, Gcm } from '../../generated/prisma/client';
 
-import { log } from '../../index';
+import { log, prisma } from '../../index';
 import * as types from '../utils/types';
 import * as vu from '../utils/validationUtils';
 import { DiscordManager } from './discordManager';
 import { sendCredentialsExpiredMessage } from '../discordUtils/discordMessages';
+
+export type TCredential = Prisma.CredentialGetPayload<{
+    include: { gcm: true };
+}>;
+
+export type TCredentialInput =
+    Omit<Credential, 'id' | 'gcmId'> &
+    Omit<Gcm, 'id'>;
+
 
 export const VERSION = 1;
 
@@ -56,150 +66,64 @@ export interface Credentials {
     expirationNotified: boolean;
 }
 
-export interface Gcm {
-    androidId: string;
-    securityToken: string;
-}
 
 export type DiscordUserIdToSteamIdsMap = {
     [discordUserId: types.UserId]: types.SteamId[];
 };
 
 export class CredentialsManager {
-    private credentialFilesPath: string;
-    private credentialsMap: CredentialsMap;
     private expirationTimeoutIds: Map<types.SteamId, NodeJS.Timeout>;
 
-    constructor(credentialFilesPath: string) {
+    constructor() {
         const fn = '[CredentialsManager: Init]';
-        log.info(`${fn} Credentials files path '${credentialFilesPath}'.`);
+        log.info(`${fn}.`);
 
-        this.credentialFilesPath = credentialFilesPath;
-        this.credentialsMap = {};
         this.expirationTimeoutIds = new Map();
-
-        this.loadAllCredentials();
     }
 
-    private loadAllCredentials(): void {
-        const fn = '[CredentialsManager: loadAllCredentials]';
-
-        const credentialFiles = fs.readdirSync(this.credentialFilesPath);
-
-        credentialFiles.forEach((file) => {
-            const steamId = path.basename(file, '.json');
-            const credentials = this.readCredentialsFile(steamId);
-
-            if (typeof credentials === 'number') {
-                throw new Error(`${fn} Failed to load Credentials file '${file}'. Exiting...`);
-            }
-
-            this.credentialsMap[steamId] = credentials;
+    public async getCredentials(steamId: types.SteamId): Promise<TCredential | null> {
+        return prisma.credential.findUnique({
+            where: { steamId },
+            include: { gcm: true },
         });
     }
 
-    private readCredentialsFile(steamId: types.SteamId): Credentials | ReadError {
-        const fn = `[CredentialsManager: readCredentialsFile: ${steamId}]`;
-        log.debug(`${fn} Reading Credentials file.`);
-
-        const credentialsFilePath = path.join(this.credentialFilesPath, `${steamId}.json`);
-
-        if (!fs.existsSync(credentialsFilePath)) {
-            log.warn(`${fn} Credentials file could not be found.`);
-            return ReadError.NotFound;
-        }
-
-        let credentialsFileContent: string;
-        try {
-            credentialsFileContent = fs.readFileSync(credentialsFilePath, 'utf8');
-        }
-        catch (error) {
-            log.warn(`${fn} Failed to read Credentials file '${credentialsFilePath}', ${error}`);
-            return ReadError.ReadFailed;
-        }
-
-        let credentialsFileContentParsed: Credentials;
-        try {
-            credentialsFileContentParsed = JSON.parse(credentialsFileContent);
-        }
-        catch (error) {
-            log.warn(`${fn} Credentials file failed parse. Data: ${credentialsFileContent}, ${error}`);
-            return ReadError.ParseFailed;
-        }
-
-        if (!isValidCredentials(credentialsFileContentParsed)) {
-            log.warn(`${fn} Credentials file have invalid format. Data: ` +
-                `${JSON.stringify(credentialsFileContentParsed)}`);
-            return ReadError.InvalidFormat;
-        }
-
-        if (credentialsFileContentParsed.version !== VERSION) {
-            log.warn(`${fn} Credentials file have invalid version. ` +
-                `Expected: ${VERSION}, Actual: ${credentialsFileContentParsed.version}`);
-            return ReadError.InvalidVersion;
-        }
-
-        const currentTimestamp = Math.floor(Date.now() / 1000);
-        if (credentialsFileContentParsed.expireDate < currentTimestamp) {
-            log.warn(`${fn} Credentials have expired. Expire date: ${credentialsFileContentParsed.expireDate}`);
-        }
-
-        log.debug(`${fn} Credentials file was successfully read.`);
-        return credentialsFileContentParsed as Credentials;
+    public async setCredentials(data: TCredentialInput): Promise<TCredential> {
+        return prisma.credential.upsert({
+            where: {
+                steamId: data.steamId
+            },
+            create: {
+                steamId: data.steamId,
+                discordUserId: data.discordUserId,
+                issueDate: data.issueDate,
+                expireDate: data.expireDate,
+                expirationNotified: data.expirationNotified,
+                gcm: {
+                    create: {
+                        androidId: data.androidId,
+                        securityToken: data.securityToken,
+                    }
+                }
+            },
+            update: {
+                discordUserId: data.discordUserId,
+                issueDate: data.issueDate,
+                expireDate: data.expireDate,
+                expirationNotified: data.expirationNotified,
+                gcm: {
+                    update: {
+                        androidId: data.androidId,
+                        securityToken: data.securityToken,
+                    }
+                }
+            },
+            include: { gcm: true }
+        });
     }
 
-    private writeCredentialsFile(steamId: types.SteamId, credentials: Credentials): WriteError {
-        const fn = `[CredentialsManager: writeCredentialsFile: ${steamId}]`;
-        log.debug(`${fn} Writing Credentials to file.`);
 
-        if (!isValidCredentials(credentials)) {
-            log.warn(`${fn} Credentials have invalid format. Data: ${JSON.stringify(credentials)}`);
-            return WriteError.InvalidFormat;
-        }
 
-        if (credentials.version !== VERSION) {
-            log.warn(`${fn} Credentials have invalid version. Expected: ${VERSION}, ` +
-                `Actual: ${credentials.version}`);
-            return WriteError.InvalidVersion;
-        }
-
-        const credentialsFilePath = path.join(this.credentialFilesPath, `${steamId}.json`);
-        const credentialsString = JSON.stringify(credentials, null, 2);
-
-        try {
-            fs.writeFileSync(credentialsFilePath, credentialsString);
-        }
-        catch (error) {
-            log.warn(`${fn} Failed to write Credentials file '${credentialsFilePath}', ${error}`);
-            return WriteError.WriteFailed;
-        }
-
-        log.debug(`${fn} Credentials was successfully written.`);
-        return WriteError.NoError;
-    }
-
-    private deleteCredentialsFile(steamId: types.SteamId): boolean {
-        const fn = `[CredentialsManager: deleteCredentialsFile: ${steamId}]`;
-        log.debug(`${fn} Delete Credentials file.`);
-
-        const credentialsFilePath = path.join(this.credentialFilesPath, `${steamId}.json`);
-
-        if (!fs.existsSync(credentialsFilePath)) {
-            log.warn(`${fn} Could not find Credentials file '${credentialsFilePath}'.`);
-            return false;
-        }
-
-        try {
-            fs.unlinkSync(credentialsFilePath);
-        }
-        catch (error) {
-            log.warn(`${fn} Failed to delete Credentials file '${credentialsFilePath}', ${error}`);
-            return false;
-        }
-
-        log.debug(`${fn} Credentials file '${credentialsFilePath}' was successfully deleted.`);
-        return true;
-    }
 
     private async handleExpiredCredentials(steamId: types.SteamId, dm: DiscordManager) {
         const credentials = this.getCredentials(steamId);
@@ -245,10 +169,6 @@ export class CredentialsManager {
         }
 
         return steamIds;
-    }
-
-    public getCredentials(steamId: types.SteamId): Credentials | null {
-        return this.credentialsMap[steamId] ?? null;
     }
 
     public getCredentialsDeepCopy(steamId: types.SteamId): Credentials | null {
@@ -341,78 +261,4 @@ export class CredentialsManager {
         }
         log.info(`${fn} Expire timeout deleted.`);
     }
-}
-
-/**
- * Validation functions.
- */
-
-export function isValidCredentials(object: unknown): object is Credentials {
-    if (typeof object !== 'object' || object === null || Array.isArray(object)) {
-        return false;
-    }
-
-    const obj = object as Credentials;
-
-    const interfaceName = 'Credentials';
-    const validKeys = [
-        'version',
-        'steamId',
-        'gcm',
-        'discordUserId',
-        'issueDate',
-        'expireDate',
-        'expirationNotified'
-    ];
-
-    const errors: (vu.ValidationError | null)[] = [];
-    errors.push(vu.validateType('version', obj.version, 'number'));
-    errors.push(vu.validateType('steamId', obj.steamId, 'string'));
-    errors.push(vu.validateInterface('gcm', obj.gcm, isValidGcm));
-    errors.push(vu.validateType('discordUserId', obj.discordUserId, 'string'));
-    errors.push(vu.validateType('issueDate', obj.issueDate, 'number'));
-    errors.push(vu.validateType('expireDate', obj.expireDate, 'number'));
-    errors.push(vu.validateType('expirationNotified', obj.expirationNotified, 'boolean'));
-
-    const filteredErrors = errors.filter((error): error is vu.ValidationError => error !== null);
-
-    const objectKeys = Object.keys(object);
-    const missingKeys = validKeys.filter(key => !objectKeys.includes(key));
-    const unknownKeys = objectKeys.filter(key => !validKeys.includes(key));
-    const hasAllRequiredKeys = missingKeys.length === 0;
-    const hasOnlyValidKeys = unknownKeys.length === 0;
-
-    vu.logValidations(interfaceName, filteredErrors, missingKeys, unknownKeys);
-
-    return filteredErrors.length === 0 && hasAllRequiredKeys && hasOnlyValidKeys;
-}
-
-export function isValidGcm(object: unknown): object is Gcm {
-    if (typeof object !== 'object' || object === null || Array.isArray(object)) {
-        return false;
-    }
-
-    const obj = object as Gcm;
-
-    const interfaceName = 'Gcm';
-    const validKeys = [
-        'androidId',
-        'securityToken'
-    ];
-
-    const errors: (vu.ValidationError | null)[] = [];
-    errors.push(vu.validateType('androidId', obj.androidId, 'string'));
-    errors.push(vu.validateType('securityToken', obj.securityToken, 'string'));
-
-    const filteredErrors = errors.filter((error): error is vu.ValidationError => error !== null);
-
-    const objectKeys = Object.keys(object);
-    const missingKeys = validKeys.filter(key => !objectKeys.includes(key));
-    const unknownKeys = objectKeys.filter(key => !validKeys.includes(key));
-    const hasAllRequiredKeys = missingKeys.length === 0;
-    const hasOnlyValidKeys = unknownKeys.length === 0;
-
-    vu.logValidations(interfaceName, filteredErrors, missingKeys, unknownKeys);
-
-    return filteredErrors.length === 0 && hasAllRequiredKeys && hasOnlyValidKeys;
 }

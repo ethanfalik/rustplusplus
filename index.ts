@@ -21,6 +21,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import dotenv from 'dotenv';
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
+import { PrismaClient } from './generated/prisma/client';
 
 import { createLogger } from './src/managers/loggerManager';
 import { LocaleManager, Languages, isValidLanguage } from './src/managers/LocaleManager';
@@ -78,6 +80,15 @@ export const config = {
     }
 }
 
+const adapter = new PrismaBetterSqlite3({
+    url: process.env.DATABASE_URL || 'file:./dev.db',
+});
+
+export const prisma = new PrismaClient({ adapter });
+const test = prisma.credential.findUnique({
+    where: { steamId: 'test' },
+    include: { gcm: true },
+});
 export const log = createLogger(path.join(__dirname, 'logs', 'rustplusplus.log'));
 
 function createMissingDirectories() {

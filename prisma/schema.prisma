@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// =====================================================================================================================
+// Credentials
+// =====================================================================================================================
+
+model Credential {
+  id                 Int      @id @default(autoincrement())
+  steamId            String   @unique
+  discordUserId      String
+  issueDate          DateTime
+  expireDate         DateTime
+  expirationNotified Boolean  @default(false)
+  gcm                Gcm      @relation(fields: [gcmId], references: [id], onDelete: Cascade)
+  gcmId              Int      @unique
+}
+
+model Gcm {
+  id            Int         @id @default(autoincrement())
+  androidId     String
+  securityToken String
+  credential    Credential?
+}
+
+// =====================================================================================================================
+// GuildInstances
+// =====================================================================================================================
+
+model GuildInstance {
+  guildId String @id
+  version Int    @default(1)
+
+  @@map("guildInstances")
+}
+
+model ServerInfo {
+  name String @id
+  desc String
+  img  String
+}

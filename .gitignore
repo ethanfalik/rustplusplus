@@ -7,3 +7,7 @@ logs
 temp
 dist
 .vscode
+generated
+*.db
+*.sqlite
+*.sqlite3
