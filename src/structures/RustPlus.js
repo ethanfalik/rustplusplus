@@ -788,6 +788,51 @@ class RustPlus extends RustPlusLib {
         return strings;
     }
 
+    getCommandCode(command, callerSteamId) {
+        const instance = Client.client.getInstance(this.guildId);
+        const prefix = this.generalSettings.prefix;
+        const commandCode = `${prefix}${Client.client.intlGet(this.guildId, 'commandSyntaxCode')}`;
+        const commandCodeEn = `${prefix}${Client.client.intlGet('en', 'commandSyntaxCode')}`;
+        const commandSet = Client.client.intlGet(this.guildId, 'commandSyntaxSet');
+        const commandSetEn = Client.client.intlGet('en', 'commandSyntaxSet');
+        const commandCodeSet = `${commandCode} ${commandSet}`;
+        const commandCodeSetEn = `${commandCodeEn} ${commandSetEn}`;
+
+        if (command.toLowerCase().startsWith(`${commandCodeSet} `) ||
+            command.toLowerCase().startsWith(`${commandCodeSetEn} `)) {
+            if (this.team.leaderSteamId !== callerSteamId) {
+                return Client.client.intlGet(this.guildId, 'onlyLeaderCanSetCode');
+            }
+
+            let code = null;
+            if (command.toLowerCase().startsWith(`${commandCodeSet} `)) {
+                code = command.slice(`${commandCodeSet} `.length).trim();
+            }
+            else {
+                code = command.slice(`${commandCodeSetEn} `.length).trim();
+            }
+
+            if (!/^\d{4}$/.test(code)) {
+                return Client.client.intlGet(this.guildId, 'invalidCode');
+            }
+
+            instance.serverList[this.serverId].teamCode = code;
+            Client.client.setInstance(this.guildId, instance);
+            return Client.client.intlGet(this.guildId, 'teamCodeSet', { code: code });
+        }
+
+        if (command.toLowerCase() === commandCode.toLowerCase() ||
+            command.toLowerCase() === commandCodeEn.toLowerCase()) {
+            const teamCode = instance.serverList[this.serverId].teamCode;
+            if (!teamCode) {
+                return Client.client.intlGet(this.guildId, 'noTeamCodeSet');
+            }
+            return Client.client.intlGet(this.guildId, 'teamCodeIs', { code: teamCode });
+        }
+
+        return null;
+    }
+
     getCommandChinook(isInfoChannel = false) {
         const strings = [];
         for (const ch47 of this.mapMarkers.ch47s) {
