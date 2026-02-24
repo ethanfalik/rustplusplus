@@ -795,17 +795,32 @@ class RustPlus extends RustPlusLib {
         const commandCodeEn = `${prefix}${Client.client.intlGet('en', 'commandSyntaxCode')}`;
         const commandSet = Client.client.intlGet(this.guildId, 'commandSyntaxSet');
         const commandSetEn = Client.client.intlGet('en', 'commandSyntaxSet');
+        const commandClear = Client.client.intlGet(this.guildId, 'commandSyntaxClear');
+        const commandClearEn = Client.client.intlGet('en', 'commandSyntaxClear');
+        const commandBlacklist = Client.client.intlGet(this.guildId, 'commandSyntaxBlacklist');
+        const commandBlacklistEn = Client.client.intlGet('en', 'commandSyntaxBlacklist');
+        const commandAdd = Client.client.intlGet(this.guildId, 'commandSyntaxAdd');
+        const commandAddEn = Client.client.intlGet('en', 'commandSyntaxAdd');
+        const commandRemove = Client.client.intlGet(this.guildId, 'commandSyntaxRemove');
+        const commandRemoveEn = Client.client.intlGet('en', 'commandSyntaxRemove');
+
+        const commandLower = command.toLowerCase();
         const commandCodeSet = `${commandCode} ${commandSet}`;
         const commandCodeSetEn = `${commandCodeEn} ${commandSetEn}`;
+        const commandCodeClear = `${commandCode} ${commandClear}`;
+        const commandCodeClearEn = `${commandCodeEn} ${commandClearEn}`;
+        const commandCodeBlacklist = `${commandCode} ${commandBlacklist}`;
+        const commandCodeBlacklistEn = `${commandCodeEn} ${commandBlacklistEn}`;
 
-        if (command.toLowerCase().startsWith(`${commandCodeSet} `) ||
-            command.toLowerCase().startsWith(`${commandCodeSetEn} `)) {
+        /* !code set 1234 */
+        if (commandLower.startsWith(`${commandCodeSet} `) ||
+            commandLower.startsWith(`${commandCodeSetEn} `)) {
             if (this.team.leaderSteamId !== callerSteamId) {
                 return Client.client.intlGet(this.guildId, 'onlyLeaderCanSetCode');
             }
 
             let code = null;
-            if (command.toLowerCase().startsWith(`${commandCodeSet} `)) {
+            if (commandLower.startsWith(`${commandCodeSet} `)) {
                 code = command.slice(`${commandCodeSet} `.length).trim();
             }
             else {
@@ -821,12 +836,113 @@ class RustPlus extends RustPlusLib {
             return Client.client.intlGet(this.guildId, 'teamCodeSet', { code: code });
         }
 
-        if (command.toLowerCase() === commandCode.toLowerCase() ||
-            command.toLowerCase() === commandCodeEn.toLowerCase()) {
+        /* !code clear */
+        if (commandLower === commandCodeClear.toLowerCase() ||
+            commandLower === commandCodeClearEn.toLowerCase()) {
+            if (this.team.leaderSteamId !== callerSteamId) {
+                return Client.client.intlGet(this.guildId, 'onlyLeaderCanSetCode');
+            }
+
+            instance.serverList[this.serverId].teamCode = null;
+            Client.client.setInstance(this.guildId, instance);
+            return Client.client.intlGet(this.guildId, 'teamCodeCleared');
+        }
+
+        /* !code blacklist */
+        if (commandLower === commandCodeBlacklist.toLowerCase() ||
+            commandLower === commandCodeBlacklistEn.toLowerCase()) {
+            if (this.team.leaderSteamId !== callerSteamId) {
+                return Client.client.intlGet(this.guildId, 'onlyLeaderCanSetCode');
+            }
+
+            const blacklist = instance.serverList[this.serverId].teamCodeBlacklist;
+            if (blacklist.length === 0) {
+                return Client.client.intlGet(this.guildId, 'codeBlacklistEmpty');
+            }
+
+            const names = blacklist.map(steamId => {
+                const player = this.team.getPlayer(steamId);
+                return player ? player.name : steamId;
+            }).join(', ');
+            return Client.client.intlGet(this.guildId, 'codeBlacklist', { names: names });
+        }
+
+        /* !code blacklist add <name> */
+        if (commandLower.startsWith(`${commandCodeBlacklist} ${commandAdd} `) ||
+            commandLower.startsWith(`${commandCodeBlacklistEn} ${commandAddEn} `)) {
+            if (this.team.leaderSteamId !== callerSteamId) {
+                return Client.client.intlGet(this.guildId, 'onlyLeaderCanSetCode');
+            }
+
+            let name = null;
+            if (commandLower.startsWith(`${commandCodeBlacklist} ${commandAdd} `)) {
+                name = command.slice(`${commandCodeBlacklist} ${commandAdd} `.length).trim();
+            }
+            else {
+                name = command.slice(`${commandCodeBlacklistEn} ${commandAddEn} `.length).trim();
+            }
+
+            const player = this.team.players.find(p => p.name.includes(name));
+            if (!player) {
+                return Client.client.intlGet(this.guildId, 'couldNotIdentifyMember', { name: name });
+            }
+
+            const blacklist = instance.serverList[this.serverId].teamCodeBlacklist;
+            if (blacklist.includes(player.steamId)) {
+                return Client.client.intlGet(this.guildId, 'playerAlreadyInCodeBlacklist', {
+                    name: player.name
+                });
+            }
+
+            blacklist.push(player.steamId);
+            Client.client.setInstance(this.guildId, instance);
+            return Client.client.intlGet(this.guildId, 'playerAddedToCodeBlacklist', { name: player.name });
+        }
+
+        /* !code blacklist remove <name> */
+        if (commandLower.startsWith(`${commandCodeBlacklist} ${commandRemove} `) ||
+            commandLower.startsWith(`${commandCodeBlacklistEn} ${commandRemoveEn} `)) {
+            if (this.team.leaderSteamId !== callerSteamId) {
+                return Client.client.intlGet(this.guildId, 'onlyLeaderCanSetCode');
+            }
+
+            let name = null;
+            if (commandLower.startsWith(`${commandCodeBlacklist} ${commandRemove} `)) {
+                name = command.slice(`${commandCodeBlacklist} ${commandRemove} `.length).trim();
+            }
+            else {
+                name = command.slice(`${commandCodeBlacklistEn} ${commandRemoveEn} `.length).trim();
+            }
+
+            const player = this.team.players.find(p => p.name.includes(name));
+            if (!player) {
+                return Client.client.intlGet(this.guildId, 'couldNotIdentifyMember', { name: name });
+            }
+
+            const blacklist = instance.serverList[this.serverId].teamCodeBlacklist;
+            const idx = blacklist.indexOf(player.steamId);
+            if (idx === -1) {
+                return Client.client.intlGet(this.guildId, 'playerNotInCodeBlacklist', { name: player.name });
+            }
+
+            blacklist.splice(idx, 1);
+            Client.client.setInstance(this.guildId, instance);
+            return Client.client.intlGet(this.guildId, 'playerRemovedFromCodeBlacklist', { name: player.name });
+        }
+
+        /* !code */
+        if (commandLower === commandCode.toLowerCase() ||
+            commandLower === commandCodeEn.toLowerCase()) {
             const teamCode = instance.serverList[this.serverId].teamCode;
             if (!teamCode) {
                 return Client.client.intlGet(this.guildId, 'noTeamCodeSet');
             }
+
+            const blacklist = instance.serverList[this.serverId].teamCodeBlacklist;
+            if (blacklist.includes(callerSteamId)) {
+                return Client.client.intlGet(this.guildId, 'noTeamCodeSet');
+            }
+
             return Client.client.intlGet(this.guildId, 'teamCodeIs', { code: teamCode });
         }
 

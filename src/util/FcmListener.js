@@ -245,6 +245,7 @@ async function pairingServer(client, guild, title, message, body) {
         url: isValidUrl(body.url) ? body.url.replace(/ /g, '%20') : Constants.DEFAULT_SERVER_URL,
         notes: server ? server.notes : {},
         teamCode: server ? server.teamCode : null,
+        teamCodeBlacklist: server ? server.teamCodeBlacklist : [],
         switches: server ? server.switches : {},
         alarms: server ? server.alarms : {},
         storageMonitors: server ? server.storageMonitors : {},
